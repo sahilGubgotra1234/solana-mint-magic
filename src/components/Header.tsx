@@ -1,4 +1,5 @@
 
+import React from "react";
 import WalletButton from "./WalletButton";
 import NetworkSelector from "./NetworkSelector";
 import { Sparkles } from "lucide-react";
