@@ -17,9 +17,16 @@ export interface TokenInfo {
   tokenDecimals: number;
 }
 
+// Custom signer interface to match what wallets provide
+interface WalletSigner {
+  publicKey: PublicKey;
+  signTransaction: (transaction: Transaction) => Promise<Transaction>;
+  signAllTransactions: (transactions: Transaction[]) => Promise<Transaction[]>;
+}
+
 export async function createToken(
   connection: Connection,
-  payer: any,
+  payer: WalletSigner,
   name: string,
   symbol: string,
   decimals: number
@@ -29,13 +36,13 @@ export async function createToken(
     const mint = await splToken.createMint(
       connection,
       {
-        publicKey: new PublicKey(payer.publicKey.toString()),
-        secretKey: Uint8Array.from([]),
+        publicKey: payer.publicKey,
+        secretKey: Uint8Array.from([]), // Not used with wallet adapter
         signTransaction: payer.signTransaction,
         signAllTransactions: payer.signAllTransactions,
-      },
-      new PublicKey(payer.publicKey.toString()),
-      new PublicKey(payer.publicKey.toString()),
+      } as any, // Using any to bridge the type gap between wallet adapter and @solana/web3.js
+      payer.publicKey,
+      payer.publicKey,
       decimals
     );
 
@@ -53,7 +60,7 @@ export async function createToken(
 
 export async function mintTokens(
   connection: Connection,
-  payer: any,
+  payer: WalletSigner,
   mintAddress: PublicKey,
   destinationAddress: PublicKey,
   amount: number,
@@ -64,11 +71,11 @@ export async function mintTokens(
     const associatedTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
       connection,
       {
-        publicKey: new PublicKey(payer.publicKey.toString()),
-        secretKey: Uint8Array.from([]),
+        publicKey: payer.publicKey,
+        secretKey: Uint8Array.from([]), // Not used with wallet adapter
         signTransaction: payer.signTransaction,
         signAllTransactions: payer.signAllTransactions,
-      },
+      } as any, // Using any to bridge the type gap
       mintAddress,
       destinationAddress
     );
@@ -79,14 +86,14 @@ export async function mintTokens(
     const signature = await splToken.mintTo(
       connection,
       {
-        publicKey: new PublicKey(payer.publicKey.toString()),
-        secretKey: Uint8Array.from([]),
+        publicKey: payer.publicKey,
+        secretKey: Uint8Array.from([]), // Not used with wallet adapter
         signTransaction: payer.signTransaction,
         signAllTransactions: payer.signAllTransactions,
-      },
+      } as any, // Using any to bridge the type gap
       mintAddress,
       associatedTokenAccount.address,
-      new PublicKey(payer.publicKey.toString()),
+      payer.publicKey,
       mintAmount
     );
 
