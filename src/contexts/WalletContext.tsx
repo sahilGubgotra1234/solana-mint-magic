@@ -62,13 +62,16 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     }
   }, [publicKey, solanaConnection]);
   
+  // Improved wallet providers detection
   const getPhantomProvider = () => {
     if ('phantom' in window) {
       const phantom = (window as any).phantom?.solana;
       if (phantom?.isPhantom) {
+        console.log("Phantom provider detected successfully");
         return phantom;
       }
     }
+    console.log("Phantom provider not detected");
     return null;
   };
   
@@ -76,9 +79,11 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     if ('solflare' in window) {
       const solflare = (window as any).solflare;
       if (solflare?.isSolflare) {
+        console.log("Solflare provider detected successfully");
         return solflare;
       }
     }
+    console.log("Solflare provider not detected");
     return null;
   };
 
@@ -96,6 +101,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   const connectWallet = async (providerType: WalletProviderType) => {
     try {
       setConnecting(true);
+      console.log(`Attempting to connect to ${providerType} wallet...`);
       
       let provider;
       if (providerType === 'phantom') {
@@ -103,7 +109,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         if (!provider) {
           window.open('https://phantom.app/', '_blank');
           toast.error('Phantom wallet not found', {
-            description: 'Please install Phantom wallet extension'
+            description: 'Please install Phantom wallet extension and reload the page'
           });
           setConnecting(false);
           return;
@@ -113,7 +119,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         if (!provider) {
           window.open('https://solflare.com/', '_blank');
           toast.error('Solflare wallet not found', {
-            description: 'Please install Solflare wallet extension'
+            description: 'Please install Solflare wallet extension and reload the page'
           });
           setConnecting(false);
           return;
@@ -126,7 +132,10 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         return;
       }
 
+      console.log("Provider found, attempting connection...");
       const resp = await provider.connect();
+      console.log("Connection response:", resp);
+      
       const publicKey = new PublicKey(resp.publicKey.toString());
       
       setWalletProvider(providerType);
@@ -144,10 +153,10 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       });
       
     } catch (error: any) {
+      console.error('Error connecting wallet:', error);
       toast.error('Connection failed', {
         description: error.message || 'Could not connect to wallet'
       });
-      console.error('Error connecting wallet:', error);
     } finally {
       setConnecting(false);
     }
