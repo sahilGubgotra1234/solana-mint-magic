@@ -1,11 +1,11 @@
-
 import { 
   clusterApiUrl, 
   Connection, 
   Keypair, 
   PublicKey, 
   Transaction, 
-  sendAndConfirmTransaction 
+  sendAndConfirmTransaction,
+  SystemProgram
 } from '@solana/web3.js';
 import * as splToken from '@solana/spl-token';
 
@@ -39,6 +39,22 @@ export async function createToken(
     // Use the SPL Token program's createMintToInstruction to create the mint
     const mintTransaction = new Transaction();
     
+    // Add necessary system instruction to create account
+    const lamports = await connection.getMinimumBalanceForRentExemption(
+      splToken.MintLayout.span
+    );
+    
+    mintTransaction.add(
+      // First create account
+      SystemProgram.createAccount({
+        fromPubkey: payer.publicKey,
+        newAccountPubkey: mintPubkey,
+        space: splToken.MintLayout.span,
+        lamports,
+        programId: splToken.TOKEN_PROGRAM_ID
+      })
+    );
+    
     // Create token mint account
     mintTransaction.add(
       splToken.createInitializeMintInstruction(
@@ -48,22 +64,6 @@ export async function createToken(
         payer.publicKey,
         splToken.TOKEN_PROGRAM_ID
       )
-    );
-    
-    // Add necessary system instruction to create account
-    const lamports = await connection.getMinimumBalanceForRentExemption(
-      splToken.MintLayout.span
-    );
-    
-    mintTransaction.add(
-      // First create account
-      splToken.SystemProgram.createAccount({
-        fromPubkey: payer.publicKey,
-        newAccountPubkey: mintPubkey,
-        space: splToken.MintLayout.span,
-        lamports,
-        programId: splToken.TOKEN_PROGRAM_ID
-      })
     );
     
     // Set recent blockhash
