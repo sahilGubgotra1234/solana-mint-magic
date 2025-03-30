@@ -32,22 +32,66 @@ export async function createToken(
   decimals: number
 ): Promise<TokenInfo> {
   try {
-    // Request signature from wallet for the transaction
-    const mint = await splToken.createMint(
-      connection,
-      {
-        publicKey: payer.publicKey,
-        secretKey: Uint8Array.from([]), // Not used with wallet adapter
-        signTransaction: payer.signTransaction,
-        signAllTransactions: payer.signAllTransactions,
-      } as any, // Using any to bridge the type gap between wallet adapter and @solana/web3.js
-      payer.publicKey,
-      payer.publicKey,
-      decimals
+    // Create mint transaction
+    const mintKeypair = Keypair.generate();
+    const mintPubkey = mintKeypair.publicKey;
+
+    // Use the SPL Token program's createMintToInstruction to create the mint
+    const mintTransaction = new Transaction();
+    
+    // Create token mint account
+    mintTransaction.add(
+      splToken.createInitializeMintInstruction(
+        mintPubkey,
+        decimals,
+        payer.publicKey,
+        payer.publicKey,
+        splToken.TOKEN_PROGRAM_ID
+      )
     );
+    
+    // Add necessary system instruction to create account
+    const lamports = await connection.getMinimumBalanceForRentExemption(
+      splToken.MintLayout.span
+    );
+    
+    mintTransaction.add(
+      // First create account
+      splToken.SystemProgram.createAccount({
+        fromPubkey: payer.publicKey,
+        newAccountPubkey: mintPubkey,
+        space: splToken.MintLayout.span,
+        lamports,
+        programId: splToken.TOKEN_PROGRAM_ID
+      })
+    );
+    
+    // Set recent blockhash
+    mintTransaction.recentBlockhash = (
+      await connection.getLatestBlockhash()
+    ).blockhash;
+    
+    // Set fee payer
+    mintTransaction.feePayer = payer.publicKey;
+    
+    // Setup partial sign with the mint keypair
+    mintTransaction.partialSign(mintKeypair);
+    
+    // Get wallet to sign transaction
+    const signedTransaction = await payer.signTransaction(mintTransaction);
+    
+    // Send the transaction
+    const transactionId = await connection.sendRawTransaction(
+      signedTransaction.serialize()
+    );
+    
+    // Wait for confirmation
+    await connection.confirmTransaction(transactionId);
+    
+    console.log(`Token mint created: ${mintPubkey.toString()}`);
 
     return {
-      tokenMint: mint,
+      tokenMint: mintPubkey,
       tokenName: name,
       tokenSymbol: symbol,
       tokenDecimals: decimals,
@@ -68,35 +112,61 @@ export async function mintTokens(
 ): Promise<string> {
   try {
     // Create associated token account if it doesn't exist
-    const associatedTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
-      connection,
-      {
-        publicKey: payer.publicKey,
-        secretKey: Uint8Array.from([]), // Not used with wallet adapter
-        signTransaction: payer.signTransaction,
-        signAllTransactions: payer.signAllTransactions,
-      } as any, // Using any to bridge the type gap
+    const associatedTokenAddress = await splToken.getAssociatedTokenAddress(
       mintAddress,
       destinationAddress
     );
-
-    // Mint tokens to the associated account
-    const mintAmount = amount * Math.pow(10, decimals);
     
-    const signature = await splToken.mintTo(
-      connection,
-      {
-        publicKey: payer.publicKey,
-        secretKey: Uint8Array.from([]), // Not used with wallet adapter
-        signTransaction: payer.signTransaction,
-        signAllTransactions: payer.signAllTransactions,
-      } as any, // Using any to bridge the type gap
-      mintAddress,
-      associatedTokenAccount.address,
-      payer.publicKey,
-      mintAmount
+    // Check if the token account already exists
+    const tokenAccountInfo = await connection.getAccountInfo(associatedTokenAddress);
+    
+    // Create the transaction
+    const transaction = new Transaction();
+    
+    // If the token account doesn't exist, create it
+    if (!tokenAccountInfo) {
+      transaction.add(
+        splToken.createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          associatedTokenAddress,
+          destinationAddress,
+          mintAddress
+        )
+      );
+    }
+    
+    // Calculate the amount with decimals
+    const mintAmount = Math.floor(amount * Math.pow(10, decimals));
+    
+    // Add the mint instruction
+    transaction.add(
+      splToken.createMintToInstruction(
+        mintAddress,
+        associatedTokenAddress,
+        payer.publicKey,
+        mintAmount
+      )
     );
-
+    
+    // Set recent blockhash
+    transaction.recentBlockhash = (
+      await connection.getLatestBlockhash()
+    ).blockhash;
+    
+    // Set fee payer
+    transaction.feePayer = payer.publicKey;
+    
+    // Get wallet to sign transaction
+    const signedTransaction = await payer.signTransaction(transaction);
+    
+    // Send the transaction
+    const signature = await connection.sendRawTransaction(
+      signedTransaction.serialize()
+    );
+    
+    // Wait for confirmation
+    await connection.confirmTransaction(signature);
+    
     return signature;
   } catch (error) {
     console.error('Error minting tokens:', error);
